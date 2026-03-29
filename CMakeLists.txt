@@ -1,11 +1,14 @@
 cmake_minimum_required(VERSION 3.14)
-project(DataSaver VERSION 1.0.0 LANGUAGES CXX)
+project(DataSaver LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(DataSaver INTERFACE)
-target_include_directories(DataSaver INTERFACE include)
+target_include_directories(DataSaver INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
 
 include(CMakePackageConfigHelpers)
 write_basic_package_version_file(
