@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace DataSaver::detail
+namespace data_saver::detail
 {
 
     template <typename... Ts>

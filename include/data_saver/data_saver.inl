@@ -2,7 +2,7 @@
 
 #include "data_saver.hpp"
 
-namespace DataSaver
+namespace data_saver
 {
 
     template <typename... Types>

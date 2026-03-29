@@ -6,7 +6,7 @@
 #include <type_traits>
 #include "detail/tuple_utils.hpp"
 
-namespace DataSaver
+namespace data_saver
 {
 
     template <typename... Types>
