@@ -1,18 +1,18 @@
 # DataSaver
 
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://isocpp.org/)
-[![Header-only](https://img.shields.io/badge/header--only-brightgreen.svg)](https://github.com/ania-7/DataSaver)
+[![Header-only](https://img.shields.io/badge/header--only-brightgreen.svg)](https://github.com/ania-7abc/DataSaver)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**DataSaver** – a minimalistic C++17 header‑only library that extends object lifetime and provides convenient access to heterogeneous data. It manages memory via `std::shared_ptr`, allows merging multiple value sets, and offers type‑safe access.
+**DataSaver** – a minimalistic C++17 header‑only library that extends object lifetime and provides convenient access to heterogeneous data. It manages memory via `std::shared_ptr`, allows merging multiple value sets, and offers type‑safe raw pointer access.
 
 ## Features
 
 - ✅ Lifetime extension – capture all `shared_ptr`s in a lambda via `Construct()`
 - ✅ Merge multiple `DataSaver` instances with `operator+`
 - ✅ Intuitive access:
-  - single type → `->` and `*` operators
-  - multiple types → `operator[]` (returns `std::variant<Types*...>`) + compile‑time `get<N>()`
+  - single type → `->`, `*`, implicit conversion to `T*`, and `raw()`
+  - multiple types → `operator[]` (returns `std::variant<Types*...>`), `raw(index)`, compile‑time `get<N>()` and `raw<N>()`
 - ✅ Header‑only – no compilation needed
 - ✅ C++17 standard (fold expressions, index_sequence)
 
@@ -36,12 +36,12 @@ target_link_libraries(your_target PRIVATE DataSaver)
 
 ### Manual
 
-Copy the `include/DataSaver` folder into your project and add the include path.
+Copy `data_saver.hpp` into your project and include it.
 
 ## Usage Example
 
 ```cpp
-#include <DataSaver/DataSaver.hpp>
+#include "data_saver.hpp"
 #include <iostream>
 
 struct Dog {
@@ -49,14 +49,18 @@ struct Dog {
 };
 
 int main() {
-    // Different objects
-    DataSaver::DataSaver<int> i(42);
-    DataSaver::DataSaver<std::string> s("hello");
-    DataSaver::DataSaver<Dog> d(Dog{});
+    using namespace data_saver;
 
-    // Single object access
+    // Single object
+    DataSaver<int> i(42);
+    DataSaver<std::string> s("hello");
+    DataSaver<Dog> d(Dog{});
+
     std::cout << *i << "\n";   // 42
     d->bark();                 // Woof!
+
+    int* raw_i = i;            // implicit conversion
+    int* raw_i2 = i.raw();
 
     // Merge
     auto merged = i + s + d;   // DataSaver<int, std::string, Dog>
@@ -65,9 +69,12 @@ int main() {
     auto v0 = merged[0];
     std::visit([](auto* p) { std::cout << *p << "\n"; }, v0); // 42
 
-    // Compile‑time index access
+    auto v1 = merged.raw(1);   // std::variant<std::string*, Dog*>
+
+    // Compile‑time access
     std::cout << merged.get<1>() << "\n"; // hello
     merged.get<2>().bark();               // Woof!
+    std::string* sp = merged.raw<1>();
 
     // Lifetime extension
     auto saver = merged.Construct();
@@ -85,14 +92,22 @@ int main() {
 | Method | Description |
 |--------|-------------|
 | `explicit DataSaver(Types... args)` | Stores copies (via move) of the passed values in `shared_ptr`. |
-| `auto Construct() const` | Returns a lambda that captures copies of all `shared_ptr`s. When called, returns a new `DataSaver` holding the same data. |
-| `operator->()`, `operator*()` | Access the single stored object (only when `sizeof...(Types) == 1`). |
-| `operator[](size_t index) const` | Runtime index access. Returns `std::variant<Types*...>`. (For multiple types only). |
-| `template<size_t I> auto& get() const` | Compile‑time index access. |
+| `auto Construct() const` | Returns a lambda capturing copies of all `shared_ptr`s. When called, returns a new `DataSaver` with the same data. |
+| **Single type only** | |
+| `operator->()`, `operator*()` | Access the stored object. |
+| `operator Types*()` | Implicit conversion to raw pointer. |
+| `Types* raw() const` | Explicit raw pointer access. |
+| **Multiple types only** | |
+| `operator[](size_t index) const` | Runtime index access. Returns `std::variant<Types*...>`. |
+| `auto raw(size_t index) const` | Same as `operator[]`. |
+| `template<size_t I> auto& get() const` | Compile‑time reference access. |
+| `template<size_t I> auto* raw() const` | Compile‑time raw pointer access. |
+| **Both** | |
+| `const std::tuple<std::shared_ptr<Types>...>& getTuple() const` | Returns the internal tuple of `shared_ptr`. |
 
 ### `operator+(const DataSaver<A...>&, const DataSaver<B...>&)`
 
-Merges two `DataSaver` instances into one containing all objects from both. The resulting type is `DataSaver<A..., B...>`.
+Merges two `DataSaver` instances into one containing all objects from both. Result type: `DataSaver<A..., B...>`.
 
 ## License
 
