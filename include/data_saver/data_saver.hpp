@@ -40,11 +40,6 @@ template <typename... Types> class DataSaver
         };
     }
 
-    template <typename Func, typename T> auto operator|(Func &&func)
-    {
-        return Construct(func);
-    }
-
     template <size_t I> decltype(auto) get()
     {
         return std::get<I>(ptrs_);
@@ -83,6 +78,11 @@ template <typename... Types> class DataSaver
 template <typename Func, typename T> auto operator|(Func &&func, std::shared_ptr<T> ptr)
 {
     return DataSaver(ptr).Construct(func);
+}
+
+template <typename Func, typename T> auto operator|(Func &&func, DataSaver<T> saver)
+{
+    return saver.Construct(func);
 }
 
 // operator+ overloads
