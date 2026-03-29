@@ -1,112 +1,101 @@
 # DataSaver
 
-[![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://isocpp.org/)
-[![Header-only](https://img.shields.io/badge/header--only-brightgreen.svg)](https://github.com/ania-7abc/DataSaver)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+A small library for C++17 that prevents dangling pointers when passing lambdas that use raw pointers obtained from `std::shared_ptr`.
 
-**DataSaver** – a minimalistic C++17 header‑only library that extends object lifetime and provides convenient access to heterogeneous data. It manages memory via `std::shared_ptr`, allows merging multiple value sets, and offers type‑safe raw pointer access.
+## The Problem
 
-## Features
+If a lambda captures a raw pointer obtained via `.get()` from a `std::shared_ptr`, the pointer becomes dangling after the `shared_ptr` is destroyed.  
+`DataSaver` solves this by binding the lambda together with the `shared_ptr`s themselves, extending the lifetime of the objects for the entire lifetime of the lambda.
 
-- ✅ Lifetime extension – capture all `shared_ptr`s in a lambda via `Construct()`
-- ✅ Merge multiple `DataSaver` instances with `operator+`
-- ✅ Intuitive access:
-  - single type → `->`, `*`, implicit conversion to `T*`
-  - multiple types → runtime `operator[]` (returns `std::variant<Types*...>`), compile‑time `get<Is>()` (returns `std::tuple<Types*...>`)
-- ✅ Header‑only – no compilation needed
-- ✅ C++17 standard (fold expressions, index_sequence)
+## How It Works
 
-## Installation
+`DataSaver<Types...>` stores a tuple of `std::shared_ptr<Types>`.  
+Its `Construct(Func&&)` method returns a new lambda that captures **copies** of those pointers **and** your function. All arguments are forwarded to the original function.  
+The `|` and `+` operators provide convenient syntax for building such bundles.
 
-### Using CMake FetchContent
+## Requirements
 
-```cmake
-include(FetchContent)
+- C++17
+- Standard library only
 
-FetchContent_Declare(
-  DataSaver
-  GIT_REPOSITORY https://github.com/ania-7/DataSaver.git
-  GIT_TAG        v2.0.0
-)
-
-FetchContent_MakeAvailable(DataSaver)
-
-target_link_libraries(your_target PRIVATE DataSaver)
-```
-
-### Manual
-
-Copy `data_saver.hpp` into your project and include it.
-
-## Usage Example
+## Example
 
 ```cpp
 #include "data_saver.hpp"
-#include <iostream>
-#include <variant>
+#include <ftxui/dom/elements.hpp>   // example third-party API
+#include <memory>
+#include <string>
 
-struct Dog {
-    void bark() const { std::cout << "Woof!\n"; }
-};
+auto make_safe_input() {
+    using namespace data_saver;
+    using namespace ftxui;
+
+    auto content = std::make_shared<std::string>();
+    auto option = InputOption::Default();
+    // InputOption::content expects a raw pointer
+    option.content = StringRef(content.get());
+
+    // The lambda captures only option, not the shared_ptr.
+    // If returned as is, content will die and option.content will be dangling.
+    // DataSaver via operator| binds the lambda together with the shared_ptr:
+    return [option]() { return Input(option); } | content;
+}
 
 int main() {
-    using namespace data_saver;
-
-    // Single object
-    DataSaver<int> i(42);
-    DataSaver<std::string> s("hello");
-    DataSaver<Dog> d(Dog{});
-
-    std::cout << *i << "\n";   // 42
-    d->bark();                 // Woof!
-
-    int* raw_i = i;            // implicit conversion
-
-    // Merge
-    auto merged = i + s + d;   // DataSaver<int, std::string, Dog>
-
-    // Runtime index access
-    auto v0 = merged[0];
-    std::visit([](auto* p) { std::cout << *p << "\n"; }, v0); // 42
-
-    // Compile‑time access (tuple of raw pointers)
-    auto [intPtr, strPtr, dogPtr] = merged.get<0, 1, 2>();
-    std::cout << *strPtr << "\n";  // hello
-    dogPtr->bark();                // Woof!
-
-    // Lifetime extension
-    auto saver = merged.Construct();
-    auto later = saver();          // new DataSaver owning the same data
-    later[0];                      // still accessible
-
-    return 0;
+    auto safe_lambda = make_safe_input();
+    // content is still alive (stored inside safe_lambda)
+    auto element = safe_lambda();   // returns ftxui::Input
 }
 ```
 
-## API Reference
+## Operators
 
-### `template<typename... Types> class DataSaver`
+### `operator|` – passing a function to DataSaver
 
-| Method | Description |
-|--------|-------------|
-| **Construction** | |
-| `explicit DataSaver(Args&&... args)` | (single type only) Forwards arguments to construct the single object inside a `shared_ptr`. |
-| `explicit DataSaver(Types... args)` | (multiple types only) Moves each argument into a separate `shared_ptr`. |
-| `explicit DataSaver(std::tuple<std::shared_ptr<Types>...> tup)` | Constructs from an existing tuple of `shared_ptr`s. |
-| **Lifetime** | |
-| `auto Construct() const` | Returns a lambda that captures copies of all `shared_ptr`s. When called, returns a new `DataSaver` with the same data. |
-| **Access – single type only** | |
-| `operator->()` | Member access via raw pointer. |
-| `operator*()` | Dereference to the stored object. |
-| `operator Types*()` | Implicit conversion to raw pointer. |
-| **Access – multiple types only** | |
-| `auto operator[](size_t index) const` | Runtime index access. Returns `std::variant<Types*...>`. Throws `std::out_of_range`. |
-| `template<size_t... Is> auto get() const` | Compile‑time multi‑get. Returns `std::tuple<Types*...>` of raw pointers. |
-| **Merging** | |
-| `friend operator+(const DataSaver<A...>&, const DataSaver<B...>&)` | Merges two `DataSaver` instances into one containing all objects from both. Result type: `DataSaver<A..., B...>`. |
+```cpp
+auto saver = DataSaver(ptr1, ptr2);
+auto composed = saver | [](auto&&... args) { /* ... */ };
 
-> **Note:** `getTuple()` is a private member – not part of the public API.
+// Symmetric form: function on the left, shared_ptr on the right
+auto composed = some_lambda | some_shared_ptr;
+```
 
-## License
+### `operator+` – combining pointers and DataSaver
 
-MIT © ania_7 (Anya Baykina Dmitrievna). See [LICENSE](LICENSE) for details.
+```cpp
+auto saver1 = ptr1 + ptr2;                // DataSaver<T1,T2>
+auto saver2 = saver1 + ptr3;              // DataSaver<T1,T2,T3>
+auto saver3 = ptr4 + saver2;              // DataSaver<T4,T1,T2,T3>
+auto saver4 = saver2 + saver3;            // combining two DataSaver
+```
+
+## Class Interface
+
+```cpp
+template <typename... Types>
+class DataSaver {
+public:
+    DataSaver(std::shared_ptr<Types>... ptrs);
+    DataSaver() = default;
+
+    // Return a lambda that returns a tuple of pointers (without user function)
+    auto Construct() const;
+
+    // Return a lambda that calls func and stores the pointers
+    template <typename Func>
+    auto Construct(Func&& func) const;
+
+    template <size_t I>
+    decltype(auto) get();
+
+    auto operator[](size_t index) const;  // returns std::variant
+
+    const auto& asTuple() const;
+};
+```
+
+## When to Use
+
+- You are working with an API that expects raw pointers (e.g., `StringRef`, `std::string_view`‑like types, legacy code).
+- You need to return a lambda that uses such a raw pointer, but the original `shared_ptr` goes out of scope.
+- You want a simple way to bundle `shared_ptr`s together with a function.
