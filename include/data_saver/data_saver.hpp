@@ -80,7 +80,7 @@ template <typename Func, typename T> auto operator|(Func &&func, std::shared_ptr
     return DataSaver(ptr).Construct(func);
 }
 
-template <typename Func, typename T> auto operator|(Func &&func, DataSaver<T> saver)
+template <typename Func, typename... Us> auto operator|(Func &&func, DataSaver<Us...> saver)
 {
     return saver.Construct(func);
 }
